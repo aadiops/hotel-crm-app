@@ -1,39 +1,51 @@
 # Hotel CRM App
 
-A complete hotel CRM dashboard built with HTML, CSS, and vanilla JavaScript. It runs entirely in the browser and stores data in `localStorage`, so it works without a backend.
+A full-stack hotel CRM built with Node.js, Express, and SQLite. It includes an admin login, dashboard, guest management, room inventory, booking management, invoice tracking, and persistent data storage.
 
 ## Features
 
+- Secure admin login with password hashing
+- Dashboard overview with occupancy and revenue metrics
 - Guest management
-- Room inventory tracking
+- Room inventory with status tracking
 - Booking creation and scheduling
-- Invoice generation and payment tracking
-- Occupancy and revenue dashboard
-- Persistent storage with localStorage
-- Responsive layout for desktop and tablet/mobile
+- Invoice lifecycle and payment updates
+- SQLite database persistence
+- Responsive browser interface
 
-## Run it locally
+## Default admin account
 
-Open `index.html` in your browser.
+- Email: `admin@hotelcrm.com`
+- Password: `admin123`
 
-Or run a simple local server from the project folder:
+## Run locally
+
+1. Install dependencies:
 
 ```bash
-python3 -m http.server 8000
+npm install
 ```
 
-Then open:
+2. Start the server:
+
+```bash
+npm start
+```
+
+3. Open in your browser:
 
 ```text
-http://localhost:8000
+http://localhost:3000
 ```
 
-## Files
+## Project structure
 
-- `index.html` — app structure
-- `styles.css` — styling and responsive layout
-- `app.js` — logic for CRM features and local persistence
+- `server.js` — Express server and API routes
+- `public/index.html` — single-page app shell
+- `public/app.js` — front-end logic
+- `public/styles.css` — styling
+- `hotel.db` — SQLite database created automatically on first run
 
 ## Notes
 
-This is a working MVP hotel CRM and is designed for local/demo use. It does not require a database or external services.
+This version is designed as a working real-world hotel CRM MVP for local/demo use.
