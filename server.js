@@ -75,7 +75,43 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'Unpaid',
     FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS staff (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    department TEXT NOT NULL DEFAULT 'Operations'
+  );
+
+  CREATE TABLE IF NOT EXISTS housekeeping_tasks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    room_id TEXT,
+    assignee TEXT,
+    priority TEXT NOT NULL DEFAULT 'Normal',
+    status TEXT NOT NULL DEFAULT 'Pending',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS maintenance_tasks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    room_id TEXT,
+    assignee TEXT,
+    priority TEXT NOT NULL DEFAULT 'Normal',
+    status TEXT NOT NULL DEFAULT 'Open',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL
+  );
 `);
+
+const defaultStaff = [
+  ['staff-front-office', 'Aisha Rahman', 'Front Office Manager', 'Front Office'],
+  ['staff-housekeeping', 'Carlos Mendes', 'Housekeeping Supervisor', 'Housekeeping'],
+  ['staff-maintenance', 'Noah Patel', 'Maintenance Lead', 'Engineering'],
+  ['staff-concierge', 'Leila Hassan', 'Guest Relations Lead', 'Guest Services']
+];
 
 const existingAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@hotelcrm.com');
 if (!existingAdmin) {
@@ -91,81 +127,26 @@ if (!existingAdmin) {
   );
 }
 
-const hasSeedData = db.prepare('SELECT COUNT(*) AS count FROM guests').get().count > 0;
-if (!hasSeedData) {
-  const guest1 = `guest-${Date.now()}-1`;
-  const guest2 = `guest-${Date.now()}-2`;
-  const guest3 = `guest-${Date.now()}-3`;
-  const room1 = `room-${Date.now()}-1`;
-  const room2 = `room-${Date.now()}-2`;
-  const room3 = `room-${Date.now()}-3`;
-  const room4 = `room-${Date.now()}-4`;
-  const room5 = `room-${Date.now()}-5`;
+const existingStaffCount = db.prepare('SELECT COUNT(*) AS count FROM staff').get().count;
+if (existingStaffCount === 0) {
+  const insertStaff = db.prepare('INSERT INTO staff (id, name, role, department) VALUES (?, ?, ?, ?)');
+  defaultStaff.forEach(([id, name, role, department]) => insertStaff.run(id, name, role, department));
+}
 
-  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
-    guest1,
-    'Ava Thompson',
-    'ava.thompson@example.com',
-    '+1 (415) 555-0134',
-    'VIP'
-  );
-  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
-    guest2,
-    'Liam Carter',
-    'liam.carter@northstar.com',
-    '+1 (212) 555-0187',
-    'Corporate'
-  );
-  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
-    guest3,
-    'Sofia Nguyen',
-    'sofia.nguyen@traveler.com',
-    '+1 (305) 555-0145',
-    'Travel'
-  );
+const existingHousekeepingCount = db.prepare('SELECT COUNT(*) AS count FROM housekeeping_tasks').get().count;
+if (existingHousekeepingCount === 0) {
+  const insertTask = db.prepare('INSERT INTO housekeeping_tasks (id, title, room_id, assignee, priority, status) VALUES (?, ?, ?, ?, ?, ?)');
+  insertTask.run('hk-101', 'Refresh Deluxe suite linens', null, 'Carlos Mendes', 'High', 'Pending');
+  insertTask.run('hk-102', 'Turnover 204 after checkout', null, 'Aisha Rahman', 'Normal', 'In Progress');
+  insertTask.run('hk-103', 'Inspect VIP amenities and minibar', null, 'Carlos Mendes', 'High', 'Pending');
+}
 
-  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room1, '101', 'King Deluxe', 220, 'Occupied');
-  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room2, '202', 'Ocean View', 260, 'Available');
-  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room3, '305', 'Junior Suite', 340, 'Occupied');
-  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room4, '410', 'Executive Suite', 420, 'Available');
-  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room5, '512', 'Family Room', 280, 'Maintenance');
-
-  const booking1 = `booking-${Date.now()}-1`;
-  const booking2 = `booking-${Date.now()}-2`;
-  const invoice1 = `invoice-${Date.now()}-1`;
-  const invoice2 = `invoice-${Date.now()}-2`;
-
-  db.prepare('INSERT INTO bookings (id, guest_id, room_id, check_in, check_out, total) VALUES (?, ?, ?, ?, ?, ?)').run(
-    booking1,
-    guest1,
-    room1,
-    '2026-10-24',
-    '2026-10-28',
-    880
-  );
-  db.prepare('INSERT INTO bookings (id, guest_id, room_id, check_in, check_out, total) VALUES (?, ?, ?, ?, ?, ?)').run(
-    booking2,
-    guest2,
-    room3,
-    '2026-10-25',
-    '2026-10-30',
-    1700
-  );
-
-  db.prepare('INSERT INTO invoices (id, booking_id, guest_name, amount, status) VALUES (?, ?, ?, ?, ?)').run(
-    invoice1,
-    booking1,
-    'Ava Thompson',
-    880,
-    'Paid'
-  );
-  db.prepare('INSERT INTO invoices (id, booking_id, guest_name, amount, status) VALUES (?, ?, ?, ?, ?)').run(
-    invoice2,
-    booking2,
-    'Liam Carter',
-    1700,
-    'Unpaid'
-  );
+const existingMaintenanceCount = db.prepare('SELECT COUNT(*) AS count FROM maintenance_tasks').get().count;
+if (existingMaintenanceCount === 0) {
+  const insertTask = db.prepare('INSERT INTO maintenance_tasks (id, title, room_id, assignee, priority, status) VALUES (?, ?, ?, ?, ?, ?)');
+  insertTask.run('mt-101', 'Air conditioning check in suite 305', null, 'Noah Patel', 'High', 'Open');
+  insertTask.run('mt-102', 'Lighting issue in corridor 2', null, 'Noah Patel', 'Normal', 'In Progress');
+  insertTask.run('mt-103', 'Bathroom drain inspection for Family room 118', null, 'Noah Patel', 'Urgent', 'Open');
 }
 
 function generateId(prefix = 'id') {
@@ -236,12 +217,9 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
   `).all();
 
   const roomStatus = db.prepare('SELECT * FROM rooms ORDER BY number ASC').all();
-
-  const roomBreakdown = {
-    occupied: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Occupied').count,
-    available: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Available').count,
-    maintenance: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Maintenance').count
-  };
+  const roomTypeBreakdown = db.prepare('SELECT type, COUNT(*) AS count FROM rooms GROUP BY type ORDER BY count DESC').all();
+  const housekeepingSummary = db.prepare('SELECT status, COUNT(*) AS count FROM housekeeping_tasks GROUP BY status ORDER BY status').all();
+  const maintenanceSummary = db.prepare('SELECT status, COUNT(*) AS count FROM maintenance_tasks GROUP BY status ORDER BY status').all();
 
   res.json({
     totals: {
@@ -251,9 +229,13 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       occupancy: totalRooms ? Math.round((occupiedRooms / totalRooms) * 100) : 0,
       revenue
     },
-    roomBreakdown,
     recentBookings,
-    roomStatus
+    roomStatus,
+    roomTypeBreakdown,
+    serviceSummary: {
+      housekeeping: housekeepingSummary,
+      maintenance: maintenanceSummary
+    }
   });
 });
 
@@ -419,10 +401,145 @@ app.delete('/api/invoices/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/staff', requireAuth, (req, res) => {
+  const staff = db.prepare('SELECT * FROM staff ORDER BY department ASC, name ASC').all();
+  res.json({ staff });
+});
+
+app.post('/api/staff', requireAuth, (req, res) => {
+  const { name, role, department } = req.body;
+  if (!name || !role) {
+    return res.status(400).json({ message: 'Name and role are required' });
+  }
+
+  const member = {
+    id: generateId('staff'),
+    name: name.trim(),
+    role: role.trim(),
+    department: department || 'Operations'
+  };
+
+  db.prepare('INSERT INTO staff (id, name, role, department) VALUES (?, ?, ?, ?)').run(
+    member.id,
+    member.name,
+    member.role,
+    member.department
+  );
+
+  res.status(201).json({ staff: member });
+});
+
+app.get('/api/housekeeping', requireAuth, (req, res) => {
+  const tasks = db.prepare(`
+    SELECT h.*, r.number AS room_number
+    FROM housekeeping_tasks h
+    LEFT JOIN rooms r ON r.id = h.room_id
+    ORDER BY CASE h.status
+      WHEN 'Pending' THEN 1
+      WHEN 'In Progress' THEN 2
+      WHEN 'Done' THEN 3
+      ELSE 4
+    END, h.created_at DESC
+  `).all();
+  res.json({ housekeeping: tasks });
+});
+
+app.post('/api/housekeeping', requireAuth, (req, res) => {
+  const { title, roomId, assignee, priority, status } = req.body;
+  if (!title) {
+    return res.status(400).json({ message: 'Task title is required' });
+  }
+
+  const task = {
+    id: generateId('housekeeping'),
+    title: title.trim(),
+    roomId: roomId || null,
+    assignee: assignee || 'Unassigned',
+    priority: priority || 'Normal',
+    status: status || 'Pending'
+  };
+
+  db.prepare('INSERT INTO housekeeping_tasks (id, title, room_id, assignee, priority, status) VALUES (?, ?, ?, ?, ?, ?)').run(
+    task.id,
+    task.title,
+    task.roomId,
+    task.assignee,
+    task.priority,
+    task.status
+  );
+
+  res.status(201).json({ housekeeping: task });
+});
+
+app.post('/api/housekeeping/:id/status', requireAuth, (req, res) => {
+  const { status } = req.body;
+  const valid = ['Pending', 'In Progress', 'Done'];
+  if (!status || !valid.includes(status)) {
+    return res.status(400).json({ message: 'Invalid housekeeping status' });
+  }
+
+  db.prepare('UPDATE housekeeping_tasks SET status = ? WHERE id = ?').run(status, req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/maintenance', requireAuth, (req, res) => {
+  const tasks = db.prepare(`
+    SELECT m.*, r.number AS room_number
+    FROM maintenance_tasks m
+    LEFT JOIN rooms r ON r.id = m.room_id
+    ORDER BY CASE m.status
+      WHEN 'Open' THEN 1
+      WHEN 'In Progress' THEN 2
+      WHEN 'Resolved' THEN 3
+      ELSE 4
+    END, m.created_at DESC
+  `).all();
+  res.json({ maintenance: tasks });
+});
+
+app.post('/api/maintenance', requireAuth, (req, res) => {
+  const { title, roomId, assignee, priority, status } = req.body;
+  if (!title) {
+    return res.status(400).json({ message: 'Task title is required' });
+  }
+
+  const task = {
+    id: generateId('maintenance'),
+    title: title.trim(),
+    roomId: roomId || null,
+    assignee: assignee || 'Unassigned',
+    priority: priority || 'Normal',
+    status: status || 'Open'
+  };
+
+  db.prepare('INSERT INTO maintenance_tasks (id, title, room_id, assignee, priority, status) VALUES (?, ?, ?, ?, ?, ?)').run(
+    task.id,
+    task.title,
+    task.roomId,
+    task.assignee,
+    task.priority,
+    task.status
+  );
+
+  res.status(201).json({ maintenance: task });
+});
+
+app.post('/api/maintenance/:id/status', requireAuth, (req, res) => {
+  const { status } = req.body;
+  const valid = ['Open', 'In Progress', 'Resolved'];
+  if (!status || !valid.includes(status)) {
+    return res.status(400).json({ message: 'Invalid maintenance status' });
+  }
+
+  db.prepare('UPDATE maintenance_tasks SET status = ? WHERE id = ?').run(status, req.params.id);
+  res.json({ ok: true });
+});
+
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(port, () => {
   console.log(`Hotel CRM server running on http://localhost:${port}`);
 });
+

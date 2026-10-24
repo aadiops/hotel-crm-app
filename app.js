@@ -1,422 +1,648 @@
-const STORAGE_KEY = "hotel-crm-state-v1";
-
-const defaultState = {
-  guests: [
-    { id: generateId(), name: "Ava Thompson", email: "ava@example.com", phone: "555-1010", type: "VIP" },
-    { id: generateId(), name: "Noah Brown", email: "noah@example.com", phone: "555-2020", type: "Corporate" },
-    { id: generateId(), name: "Mia Davis", email: "mia@example.com", phone: "555-3030", type: "Travel" }
-  ],
-  rooms: [
-    { id: generateId(), number: "101", type: "Standard", price: 120, status: "Available" },
-    { id: generateId(), number: "202", type: "Deluxe", price: 180, status: "Occupied" },
-    { id: generateId(), number: "305", type: "Suite", price: 260, status: "Available" }
-  ],
-  bookings: [
-    { id: generateId(), guestId: null, roomId: null, checkIn: "2026-10-26", checkOut: "2026-10-29" }
-  ],
-  invoices: [
-    { id: generateId(), bookingId: null, guestName: "Ava Thompson", amount: 360, status: "Paid" }
-  ]
+const state = {
+  user: null,
+  dashboard: null,
+  guests: [],
+  rooms: [],
+  bookings: [],
+  invoices: [],
+  staff: [],
+  housekeeping: [],
+  maintenance: []
 };
 
-let state = loadState();
+const loginScreen = document.getElementById('loginScreen');
+const appScreen = document.getElementById('appScreen');
+const userBadge = document.getElementById('userBadge');
 
-function generateId() {
-  if (window.crypto && crypto.randomUUID) {
-    return crypto.randomUUID();
+const formatCurrency = (value) => `$${Number(value || 0).toLocaleString()}`;
+
+const showApp = () => {
+  loginScreen.classList.add('hidden');
+  loginScreen.classList.remove('active');
+  appScreen.classList.remove('hidden');
+  appScreen.classList.add('active');
+};
+
+const showLogin = () => {
+  appScreen.classList.add('hidden');
+  appScreen.classList.remove('active');
+  loginScreen.classList.remove('hidden');
+  loginScreen.classList.add('active');
+};
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || 'Request failed');
   }
-  return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+
+  return response.json();
 }
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return structuredClone(defaultState);
-  }
-
+async function loadCurrentUser() {
   try {
-    const parsed = JSON.parse(raw);
-    return {
-      guests: parsed.guests || [],
-      rooms: parsed.rooms || [],
-      bookings: parsed.bookings || [],
-      invoices: parsed.invoices || []
-    };
+    const payload = await fetchJson('/api/auth/me');
+    state.user = payload.user;
+    userBadge.textContent = state.user.name;
+    showApp();
+    await loadAllData();
   } catch (error) {
-    return structuredClone(defaultState);
+    state.user = null;
+    showLogin();
   }
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+async function loadAllData() {
+  try {
+    const [dashboard, guests, rooms, bookings, invoices, staff, housekeeping, maintenance] = await Promise.all([
+      fetchJson('/api/dashboard'),
+      fetchJson('/api/guests'),
+      fetchJson('/api/rooms'),
+      fetchJson('/api/bookings'),
+      fetchJson('/api/invoices'),
+      fetchJson('/api/staff'),
+      fetchJson('/api/housekeeping'),
+      fetchJson('/api/maintenance')
+    ]);
 
-function diffDays(startDate, endDate) {
-  if (!startDate || !endDate) return 1;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
-}
+    state.dashboard = dashboard;
+    state.guests = guests.guests;
+    state.rooms = rooms.rooms;
+    state.bookings = bookings.bookings;
+    state.invoices = invoices.invoices;
+    state.staff = staff.staff;
+    state.housekeeping = housekeeping.housekeeping;
+    state.maintenance = maintenance.maintenance;
 
-function formatCurrency(value) {
-  return `$${Number(value || 0).toLocaleString()}`;
-}
-
-function getGuestById(id) {
-  return state.guests.find((guest) => guest.id === id);
-}
-
-function getRoomById(id) {
-  return state.rooms.find((room) => room.id === id);
-}
-
-function getRoomBookingTotal(booking) {
-  const room = getRoomById(booking.roomId);
-  if (!room) return 0;
-  return room.price * diffDays(booking.checkIn, booking.checkOut);
-}
-
-function buildInvoiceFromBooking(booking) {
-  const guest = getGuestById(booking.guestId);
-  const room = getRoomById(booking.roomId);
-  const total = getRoomBookingTotal(booking);
-
-  return {
-    id: generateId(),
-    bookingId: booking.id,
-    guestName: guest ? guest.name : "Unknown Guest",
-    amount: total,
-    status: "Unpaid"
-  };
+    renderDashboard();
+    renderGuestList();
+    renderRoomList();
+    renderBookingList();
+    renderInvoiceList();
+    renderSelectorOptions();
+    renderStaffList();
+    renderHousekeepingList();
+    renderMaintenanceList();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function renderDashboard() {
-  const totalRevenue = state.invoices
-    .filter((invoice) => invoice.status === "Paid")
-    .reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+  const { totals, recentBookings, roomStatus, roomTypeBreakdown, serviceSummary } = state.dashboard || {
+    totals: { guests: 0, rooms: 0, bookings: 0, occupancy: 0, revenue: 0 },
+    recentBookings: [],
+    roomStatus: [],
+    roomTypeBreakdown: [],
+    serviceSummary: { housekeeping: [], maintenance: [] }
+  };
 
-  const occupiedRooms = state.rooms.filter((room) => room.status === "Occupied").length;
-  const occupancy = state.rooms.length ? Math.round((occupiedRooms / state.rooms.length) * 100) : 0;
+  document.getElementById('occupancyStat').textContent = `${totals.occupancy}%`;
+  document.getElementById('revenueStat').textContent = formatCurrency(totals.revenue);
+  document.getElementById('bookingsStat').textContent = totals.bookings;
+  document.getElementById('guestsStat').textContent = totals.guests;
 
-  document.getElementById("occupancyStat").textContent = `${occupancy}%`;
-  document.getElementById("revenueStat").textContent = formatCurrency(totalRevenue);
-  document.getElementById("bookingsStat").textContent = String(state.bookings.length);
-  document.getElementById("guestsStat").textContent = String(state.guests.length);
-
-  const roomStatusList = document.getElementById("roomStatusList");
-  roomStatusList.innerHTML = state.rooms.length
-    ? state.rooms.map((room) => `
-      <div class="stack-item">
-        <div class="meta">
-          <strong>Room ${room.number}</strong>
-          <small>${room.type}</small>
-        </div>
-        <span class="badge ${room.status.toLowerCase()}">${room.status}</span>
-      </div>
-    `).join("")
-    : '<div class="empty-state">No rooms added yet.</div>';
-
-  const recentBookings = [...state.bookings].slice(-3).reverse();
-  const recentBookingsHTML = recentBookings.length
-    ? recentBookings.map((booking) => {
-        const guest = getGuestById(booking.guestId);
-        const room = getRoomById(booking.roomId);
-
-        return `
-          <div class="stack-item">
-            <div class="meta">
-              <strong>${guest ? guest.name : "Unknown Guest"}</strong>
-              <small>${room ? `Room ${room.number}` : "No room"} · ${booking.checkIn} to ${booking.checkOut}</small>
+  const roomStatusList = document.getElementById('roomStatusList');
+  roomStatusList.innerHTML = roomStatus.length
+    ? roomStatus
+        .map(
+          (room) => `
+            <div class="stack-item">
+              <div class="meta">
+                <strong>Room ${room.number}</strong>
+                <small>${room.type}</small>
+              </div>
+              <span class="badge ${room.status.toLowerCase()}">${room.status}</span>
             </div>
-            <strong>${formatCurrency(getRoomBookingTotal(booking))}</strong>
-          </div>
-        `;
-      }).join("")
-    : '<div class="empty-state">No recent bookings.</div>';
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No rooms yet.</div>';
 
-  document.getElementById("recentBookings").innerHTML = recentBookingsHTML;
+  const recentBookingsList = document.getElementById('recentBookings');
+  recentBookingsList.innerHTML = recentBookings.length
+    ? recentBookings
+        .map(
+          (booking) => `
+            <div class="stack-item">
+              <div class="meta">
+                <strong>${booking.guest_name || 'Guest'}</strong>
+                <small>${booking.room_number ? `Room ${booking.room_number}` : 'No room'} · ${booking.check_in} to ${booking.check_out}</small>
+              </div>
+              <strong>${formatCurrency(booking.total || 0)}</strong>
+            </div>
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No bookings yet.</div>';
+
+  const roomTypeBreakdownList = document.getElementById('roomTypeBreakdown');
+  roomTypeBreakdownList.innerHTML = roomTypeBreakdown.length
+    ? roomTypeBreakdown
+        .map(
+          (item) => `
+            <div class="mini-stat">
+              <span>${item.type}</span>
+              <strong>${item.count}</strong>
+            </div>
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No room types yet.</div>';
+
+  const housekeepingSummary = document.getElementById('housekeepingSummary');
+  const maintenanceSummary = document.getElementById('maintenanceSummary');
+
+  housekeepingSummary.innerHTML = (serviceSummary.housekeeping || []).length
+    ? (serviceSummary.housekeeping || [])
+        .map(
+          (item) => `
+            <div class="mini-stat">
+              <span>${item.status}</span>
+              <strong>${item.count}</strong>
+            </div>
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No housekeeping tasks.</div>';
+
+  maintenanceSummary.innerHTML = (serviceSummary.maintenance || []).length
+    ? (serviceSummary.maintenance || [])
+        .map(
+          (item) => `
+            <div class="mini-stat">
+              <span>${item.status}</span>
+              <strong>${item.count}</strong>
+            </div>
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No maintenance tasks.</div>';
 }
 
-function renderGuests() {
-  const guestList = document.getElementById("guestList");
+function renderGuestList() {
+  const guestList = document.getElementById('guestList');
   guestList.innerHTML = state.guests.length
-    ? state.guests.map((guest) => `
-      <div class="list-item">
-        <div class="meta">
-          <strong>${guest.name}</strong>
-          <small>${guest.email}</small>
-          <small>${guest.phone}</small>
-        </div>
-        <div class="inline-actions">
-          <span class="badge ${guest.type.toLowerCase()}">${guest.type}</span>
-          <button class="delete-btn" data-type="guest" data-id="${guest.id}">Delete</button>
-        </div>
-      </div>
-    `).join("")
+    ? state.guests
+        .map(
+          (guest) => `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${guest.name}</strong>
+                <small>${guest.email}</small>
+                <small>${guest.phone}</small>
+              </div>
+              <div class="inline-actions">
+                <span class="badge ${guest.type.toLowerCase()}">${guest.type}</span>
+                <button class="delete-btn" data-type="guest" data-id="${guest.id}">Delete</button>
+              </div>
+            </div>
+          `
+        )
+        .join('')
     : '<div class="empty-state">No guests recorded yet.</div>';
 }
 
-function renderRooms() {
-  const roomList = document.getElementById("roomList");
+function renderRoomList() {
+  const roomList = document.getElementById('roomList');
   roomList.innerHTML = state.rooms.length
-    ? state.rooms.map((room) => `
-      <div class="list-item">
-        <div class="meta">
-          <strong>Room ${room.number}</strong>
-          <small>${room.type} · ${formatCurrency(room.price)}/night</small>
-        </div>
-        <div class="inline-actions">
-          <span class="badge ${room.status.toLowerCase()}">${room.status}</span>
-          <button class="delete-btn" data-type="room" data-id="${room.id}">Delete</button>
-        </div>
-      </div>
-    `).join("")
+    ? state.rooms
+        .map(
+          (room) => `
+            <div class="list-item">
+              <div class="meta">
+                <strong>Room ${room.number}</strong>
+                <small>${room.type} · ${formatCurrency(room.price)}/night</small>
+              </div>
+              <div class="inline-actions">
+                <span class="badge ${room.status.toLowerCase()}">${room.status}</span>
+                <button class="delete-btn" data-type="room" data-id="${room.id}">Delete</button>
+              </div>
+            </div>
+          `
+        )
+        .join('')
     : '<div class="empty-state">No rooms added yet.</div>';
 }
 
-function renderBookings() {
-  const bookingList = document.getElementById("bookingList");
+function renderBookingList() {
+  const bookingList = document.getElementById('bookingList');
   bookingList.innerHTML = state.bookings.length
-    ? state.bookings.map((booking) => {
-        const guest = getGuestById(booking.guestId);
-        const room = getRoomById(booking.roomId);
-        const total = getRoomBookingTotal(booking);
-
-        return `
-          <div class="list-item">
-            <div class="meta">
-              <strong>${guest ? guest.name : "Unknown guest"}</strong>
-              <small>${room ? `Room ${room.number}` : "No room"} · ${booking.checkIn} to ${booking.checkOut}</small>
+    ? state.bookings
+        .map(
+          (booking) => `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${booking.guest_name || 'Unknown guest'}</strong>
+                <small>${booking.room_number ? `Room ${booking.room_number}` : 'No room'} · ${booking.check_in} to ${booking.check_out}</small>
+              </div>
+              <div class="inline-actions">
+                <strong>${formatCurrency(booking.total || 0)}</strong>
+                <button class="delete-btn" data-type="booking" data-id="${booking.id}">Delete</button>
+              </div>
             </div>
-            <div class="inline-actions">
-              <strong>${formatCurrency(total)}</strong>
-              <button class="action-btn" data-type="invoice" data-booking-id="${booking.id}">Invoice</button>
-              <button class="delete-btn" data-type="booking" data-id="${booking.id}">Delete</button>
-            </div>
-          </div>
-        `;
-      }).join("")
+          `
+        )
+        .join('')
     : '<div class="empty-state">No bookings scheduled.</div>';
 }
 
-function renderInvoices() {
-  const invoiceList = document.getElementById("invoiceList");
+function renderInvoiceList() {
+  const invoiceList = document.getElementById('invoiceList');
   invoiceList.innerHTML = state.invoices.length
-    ? state.invoices.map((invoice) => `
-      <div class="list-item">
-        <div class="meta">
-          <strong>${invoice.guestName}</strong>
-          <small>Invoice #${invoice.id.slice(0, 8)}</small>
-        </div>
-        <div class="inline-actions">
-          <strong>${formatCurrency(invoice.amount)}</strong>
-          <span class="badge ${invoice.status.toLowerCase()}">${invoice.status}</span>
-          <button class="action-btn" data-type="mark-paid" data-id="${invoice.id}">Mark Paid</button>
-          <button class="delete-btn" data-type="invoice" data-id="${invoice.id}">Delete</button>
-        </div>
-      </div>
-    `).join("")
+    ? state.invoices
+        .map(
+          (invoice) => `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${invoice.guest_name}</strong>
+                <small>Invoice #${invoice.id.slice(0, 8)}</small>
+              </div>
+              <div class="inline-actions">
+                <strong>${formatCurrency(invoice.amount)}</strong>
+                <span class="badge ${invoice.status.toLowerCase()}">${invoice.status}</span>
+                <button class="action-btn" data-type="mark-paid" data-id="${invoice.id}">Mark Paid</button>
+                <button class="delete-btn" data-type="invoice" data-id="${invoice.id}">Delete</button>
+              </div>
+            </div>
+          `
+        )
+        .join('')
     : '<div class="empty-state">No invoices created.</div>';
 }
 
-function renderSelectors() {
-  const guestSelect = document.getElementById("bookingGuest");
-  const roomSelect = document.getElementById("bookingRoom");
-
-  guestSelect.innerHTML = state.guests.length
-    ? state.guests.map((guest) => `<option value="${guest.id}">${guest.name}</option>`).join("")
-    : '<option value="">No guests available</option>';
-
-  roomSelect.innerHTML = state.rooms.length
-    ? state.rooms.map((room) => `<option value="${room.id}">Room ${room.number} · ${formatCurrency(room.price)}</option>`).join("")
-    : '<option value="">No rooms available</option>';
+function renderStaffList() {
+  const staffList = document.getElementById('staffList');
+  staffList.innerHTML = state.staff.length
+    ? state.staff
+        .map(
+          (member) => `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${member.name}</strong>
+                <small>${member.role}</small>
+                <small>${member.department}</small>
+              </div>
+            </div>
+          `
+        )
+        .join('')
+    : '<div class="empty-state">No staff assigned yet.</div>';
 }
 
-function syncBookingState() {
-  state.bookings = state.bookings.filter((booking) => {
-    const hasGuest = state.guests.some((guest) => guest.id === booking.guestId);
-    const hasRoom = state.rooms.some((room) => room.id === booking.roomId);
-    return hasGuest && hasRoom;
-  });
+function renderHousekeepingList() {
+  const housekeepingList = document.getElementById('housekeepingList');
+  housekeepingList.innerHTML = state.housekeeping.length
+    ? state.housekeeping
+        .map((task) => {
+          const statuses = ['Pending', 'In Progress', 'Done'];
+          const currentIndex = statuses.indexOf(task.status);
+          const nextStatus = statuses[(currentIndex + 1) % statuses.length];
 
-  state.invoices = state.invoices.filter((invoice) => {
-    const linkedBooking = state.bookings.some((booking) => booking.id === invoice.bookingId);
-    return linkedBooking || !invoice.bookingId;
-  });
+          return `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${task.title}</strong>
+                <small>${task.room_number ? `Room ${task.room_number}` : 'General area'} · ${task.assignee || 'Unassigned'}</small>
+                <small>${task.priority}</small>
+              </div>
+              <div class="inline-actions">
+                <span class="badge ${task.status.toLowerCase().replace(/\s+/g, '-')}">${task.status}</span>
+                <button class="action-btn task-status-btn" data-type="toggle-housekeeping" data-id="${task.id}" data-status="${nextStatus}">${nextStatus}</button>
+              </div>
+            </div>
+          `;
+        })
+        .join('')
+    : '<div class="empty-state">No housekeeping tasks.</div>';
 }
 
-function handleDelete(event) {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
+function renderMaintenanceList() {
+  const maintenanceList = document.getElementById('maintenanceList');
+  maintenanceList.innerHTML = state.maintenance.length
+    ? state.maintenance
+        .map((task) => {
+          const statuses = ['Open', 'In Progress', 'Resolved'];
+          const currentIndex = statuses.indexOf(task.status);
+          const nextStatus = statuses[(currentIndex + 1) % statuses.length];
 
-  const { type, id } = target.dataset;
-  if (!type || !id) return;
-
-  if (type === "guest") {
-    state.guests = state.guests.filter((guest) => guest.id !== id);
-  }
-
-  if (type === "room") {
-    state.rooms = state.rooms.filter((room) => room.id !== id);
-    state.bookings = state.bookings.filter((booking) => booking.roomId !== id);
-  }
-
-  if (type === "booking") {
-    state.bookings = state.bookings.filter((booking) => booking.id !== id);
-    state.invoices = state.invoices.filter((invoice) => invoice.bookingId !== id);
-  }
-
-  if (type === "invoice") {
-    state.invoices = state.invoices.filter((invoice) => invoice.id !== id);
-  }
-
-  syncBookingState();
-  renderAll();
+          return `
+            <div class="list-item">
+              <div class="meta">
+                <strong>${task.title}</strong>
+                <small>${task.room_number ? `Room ${task.room_number}` : 'General area'} · ${task.assignee || 'Unassigned'}</small>
+                <small>${task.priority}</small>
+              </div>
+              <div class="inline-actions">
+                <span class="badge ${task.status.toLowerCase().replace(/\s+/g, '-')}">${task.status}</span>
+                <button class="action-btn task-status-btn" data-type="toggle-maintenance" data-id="${task.id}" data-status="${nextStatus}">${nextStatus}</button>
+              </div>
+            </div>
+          `;
+        })
+        .join('')
+    : '<div class="empty-state">No maintenance tasks.</div>';
 }
 
-function handleAction(event) {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
+function renderSelectorOptions() {
+  const guestSelect = document.getElementById('bookingGuest');
+  const roomSelect = document.getElementById('bookingRoom');
+  const housekeepingRoomSelect = document.getElementById('housekeepingRoom');
+  const maintenanceRoomSelect = document.getElementById('maintenanceRoom');
+  const staffSelect = document.getElementById('staffMember');
 
-  const { type, id, bookingId } = target.dataset;
-  if (!type) return;
-
-  if (type === "mark-paid") {
-    const invoice = state.invoices.find((item) => item.id === id);
-    if (invoice) {
-      invoice.status = "Paid";
-    }
+  if (guestSelect) {
+    guestSelect.innerHTML = state.guests.length
+      ? state.guests.map((guest) => `<option value="${guest.id}">${guest.name}</option>`).join('')
+      : '<option value="">No guests available</option>';
   }
 
-  if (type === "invoice") {
-    const booking = state.bookings.find((item) => item.id === bookingId);
-    if (!booking) return;
-    const invoice = buildInvoiceFromBooking(booking);
-    state.invoices.push(invoice);
+  if (roomSelect) {
+    roomSelect.innerHTML = state.rooms.length
+      ? state.rooms.map((room) => `<option value="${room.id}">Room ${room.number} · ${formatCurrency(room.price)}</option>`).join('')
+      : '<option value="">No rooms available</option>';
   }
 
-  renderAll();
+  if (housekeepingRoomSelect) {
+    housekeepingRoomSelect.innerHTML = state.rooms.length
+      ? state.rooms.map((room) => `<option value="${room.id}">Room ${room.number}</option>`).join('')
+      : '<option value="">No rooms available</option>';
+  }
+
+  if (maintenanceRoomSelect) {
+    maintenanceRoomSelect.innerHTML = state.rooms.length
+      ? state.rooms.map((room) => `<option value="${room.id}">Room ${room.number}</option>`).join('')
+      : '<option value="">No rooms available</option>';
+  }
+
+  if (staffSelect) {
+    staffSelect.innerHTML = state.staff.length
+      ? state.staff.map((member) => `<option value="${member.name}">${member.name}</option>`).join('')
+      : '<option value="">No staff available</option>';
+  }
 }
 
-function renderAll() {
-  renderDashboard();
-  renderGuests();
-  renderRooms();
-  renderBookings();
-  renderInvoices();
-  renderSelectors();
-  saveState();
+async function loginUser(event) {
+  event.preventDefault();
+
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+
+  try {
+    const payload = await fetchJson('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+
+    state.user = payload.user;
+    userBadge.textContent = state.user.name;
+    showApp();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function initNavigation() {
-  document.querySelectorAll(".nav-btn").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".nav-btn").forEach((btn) => btn.classList.remove("active"));
-      document.querySelectorAll(".panel").forEach((panel) => panel.classList.remove("active"));
+async function logoutUser() {
+  try {
+    await fetchJson('/api/auth/logout', { method: 'POST' });
+    state.user = null;
+    showLogin();
+  } catch (error) {
+    console.error(error);
+  }
+}
 
-      button.classList.add("active");
+async function createGuest(event) {
+  event.preventDefault();
+
+  const payload = {
+    name: document.getElementById('guestName').value.trim(),
+    email: document.getElementById('guestEmail').value.trim(),
+    phone: document.getElementById('guestPhone').value.trim(),
+    type: document.getElementById('guestType').value
+  };
+
+  try {
+    await fetchJson('/api/guests', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function createRoom(event) {
+  event.preventDefault();
+
+  const payload = {
+    number: document.getElementById('roomNumber').value.trim(),
+    type: document.getElementById('roomType').value,
+    price: document.getElementById('roomPrice').value,
+    status: document.getElementById('roomStatus').value
+  };
+
+  try {
+    await fetchJson('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function createBooking(event) {
+  event.preventDefault();
+
+  const payload = {
+    guestId: document.getElementById('bookingGuest').value,
+    roomId: document.getElementById('bookingRoom').value,
+    checkIn: document.getElementById('checkIn').value,
+    checkOut: document.getElementById('checkOut').value
+  };
+
+  try {
+    await fetchJson('/api/bookings', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function createStaffMember(event) {
+  event.preventDefault();
+
+  const payload = {
+    name: document.getElementById('staffName').value.trim(),
+    role: document.getElementById('staffRole').value.trim(),
+    department: document.getElementById('staffDepartment').value
+  };
+
+  try {
+    await fetchJson('/api/staff', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function createHousekeepingTask(event) {
+  event.preventDefault();
+
+  const payload = {
+    title: document.getElementById('housekeepingTitle').value.trim(),
+    roomId: document.getElementById('housekeepingRoom').value || null,
+    assignee: document.getElementById('staffMember').value || 'Unassigned',
+    priority: document.getElementById('housekeepingPriority').value,
+    status: document.getElementById('housekeepingStatus').value
+  };
+
+  try {
+    await fetchJson('/api/housekeeping', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function createMaintenanceTask(event) {
+  event.preventDefault();
+
+  const payload = {
+    title: document.getElementById('maintenanceTitle').value.trim(),
+    roomId: document.getElementById('maintenanceRoom').value || null,
+    assignee: document.getElementById('maintenanceStaff').value || 'Unassigned',
+    priority: document.getElementById('maintenancePriority').value,
+    status: document.getElementById('maintenanceStatus').value
+  };
+
+  try {
+    await fetchJson('/api/maintenance', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    event.target.reset();
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function handleDelete(type, id) {
+  try {
+    if (type === 'guest') await fetchJson(`/api/guests/${id}`, { method: 'DELETE' });
+    if (type === 'room') await fetchJson(`/api/rooms/${id}`, { method: 'DELETE' });
+    if (type === 'booking') await fetchJson(`/api/bookings/${id}`, { method: 'DELETE' });
+    if (type === 'invoice') await fetchJson(`/api/invoices/${id}`, { method: 'DELETE' });
+
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function markInvoicePaid(id) {
+  try {
+    await fetchJson(`/api/invoices/${id}/pay`, { method: 'POST' });
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function toggleHousekeepingStatus(id, status) {
+  try {
+    await fetchJson(`/api/housekeeping/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    });
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function toggleMaintenanceStatus(id, status) {
+  try {
+    await fetchJson(`/api/maintenance/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    });
+    await loadAllData();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function bindEvents() {
+  document.getElementById('loginForm').addEventListener('submit', loginUser);
+  document.getElementById('logoutBtn').addEventListener('click', logoutUser);
+  document.getElementById('guestForm').addEventListener('submit', createGuest);
+  document.getElementById('roomForm').addEventListener('submit', createRoom);
+  document.getElementById('bookingForm').addEventListener('submit', createBooking);
+  document.getElementById('staffForm').addEventListener('submit', createStaffMember);
+  document.getElementById('housekeepingForm').addEventListener('submit', createHousekeepingTask);
+  document.getElementById('maintenanceForm').addEventListener('submit', createMaintenanceTask);
+
+  document.querySelectorAll('.nav-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.id === 'logoutBtn') return;
+      document.querySelectorAll('.nav-btn').forEach((btn) => btn.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach((panel) => panel.classList.remove('active'));
+
+      button.classList.add('active');
       const target = document.getElementById(button.dataset.panel);
-      target.classList.add("active");
+      if (target) target.classList.add('active');
     });
   });
-}
 
-function initGuestForm() {
-  const form = document.getElementById("guestForm");
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const guest = {
-      id: generateId(),
-      name: document.getElementById("guestName").value.trim(),
-      email: document.getElementById("guestEmail").value.trim(),
-      phone: document.getElementById("guestPhone").value.trim(),
-      type: document.getElementById("guestType").value
-    };
-
-    if (!guest.name || !guest.email || !guest.phone) return;
-    state.guests.push(guest);
-    form.reset();
-    renderAll();
-  });
-}
-
-function initRoomForm() {
-  const form = document.getElementById("roomForm");
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const room = {
-      id: generateId(),
-      number: document.getElementById("roomNumber").value.trim(),
-      type: document.getElementById("roomType").value,
-      price: Number(document.getElementById("roomPrice").value),
-      status: document.getElementById("roomStatus").value
-    };
-
-    if (!room.number || !room.price) return;
-    state.rooms.push(room);
-    form.reset();
-    renderAll();
-  });
-}
-
-function initBookingForm() {
-  const form = document.getElementById("bookingForm");
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-
-    if (!state.guests.length || !state.rooms.length) {
-      alert("Add at least one guest and one room before creating a booking.");
+  document.addEventListener('click', async (event) => {
+    const el = event.target.closest('.delete-btn');
+    if (el) {
+      await handleDelete(el.dataset.type, el.dataset.id);
       return;
     }
 
-    const guestId = document.getElementById("bookingGuest").value;
-    const roomId = document.getElementById("bookingRoom").value;
-    const checkIn = document.getElementById("checkIn").value;
-    const checkOut = document.getElementById("checkOut").value;
-
-    if (!guestId || !roomId || !checkIn || !checkOut) return;
-
-    const booking = {
-      id: generateId(),
-      guestId,
-      roomId,
-      checkIn,
-      checkOut
-    };
-
-    state.bookings.push(booking);
-    const room = getRoomById(roomId);
-    if (room) room.status = "Occupied";
-
-    state.invoices.push(buildInvoiceFromBooking(booking));
-    form.reset();
-    renderAll();
-  });
-}
-
-function initGlobalEvents() {
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-
-    if (target.matches(".delete-btn")) {
-      handleDelete(event);
+    const markBtn = event.target.closest('.action-btn');
+    if (markBtn && markBtn.dataset.type === 'mark-paid') {
+      await markInvoicePaid(markBtn.dataset.id);
       return;
     }
 
-    if (target.matches(".action-btn")) {
-      handleAction(event);
+    if (markBtn && markBtn.dataset.type === 'toggle-housekeeping') {
+      await toggleHousekeepingStatus(markBtn.dataset.id, markBtn.dataset.status);
+      return;
+    }
+
+    if (markBtn && markBtn.dataset.type === 'toggle-maintenance') {
+      await toggleMaintenanceStatus(markBtn.dataset.id, markBtn.dataset.status);
     }
   });
 }
 
-function init() {
-  initNavigation();
-  initGuestForm();
-  initRoomForm();
-  initBookingForm();
-  initGlobalEvents();
-  renderAll();
-}
+bindEvents();
+loadCurrentUser();
 
-init();
