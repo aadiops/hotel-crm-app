@@ -91,6 +91,83 @@ if (!existingAdmin) {
   );
 }
 
+const hasSeedData = db.prepare('SELECT COUNT(*) AS count FROM guests').get().count > 0;
+if (!hasSeedData) {
+  const guest1 = `guest-${Date.now()}-1`;
+  const guest2 = `guest-${Date.now()}-2`;
+  const guest3 = `guest-${Date.now()}-3`;
+  const room1 = `room-${Date.now()}-1`;
+  const room2 = `room-${Date.now()}-2`;
+  const room3 = `room-${Date.now()}-3`;
+  const room4 = `room-${Date.now()}-4`;
+  const room5 = `room-${Date.now()}-5`;
+
+  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
+    guest1,
+    'Ava Thompson',
+    'ava.thompson@example.com',
+    '+1 (415) 555-0134',
+    'VIP'
+  );
+  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
+    guest2,
+    'Liam Carter',
+    'liam.carter@northstar.com',
+    '+1 (212) 555-0187',
+    'Corporate'
+  );
+  db.prepare('INSERT INTO guests (id, name, email, phone, type) VALUES (?, ?, ?, ?, ?)').run(
+    guest3,
+    'Sofia Nguyen',
+    'sofia.nguyen@traveler.com',
+    '+1 (305) 555-0145',
+    'Travel'
+  );
+
+  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room1, '101', 'King Deluxe', 220, 'Occupied');
+  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room2, '202', 'Ocean View', 260, 'Available');
+  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room3, '305', 'Junior Suite', 340, 'Occupied');
+  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room4, '410', 'Executive Suite', 420, 'Available');
+  db.prepare('INSERT INTO rooms (id, number, type, price, status) VALUES (?, ?, ?, ?, ?)').run(room5, '512', 'Family Room', 280, 'Maintenance');
+
+  const booking1 = `booking-${Date.now()}-1`;
+  const booking2 = `booking-${Date.now()}-2`;
+  const invoice1 = `invoice-${Date.now()}-1`;
+  const invoice2 = `invoice-${Date.now()}-2`;
+
+  db.prepare('INSERT INTO bookings (id, guest_id, room_id, check_in, check_out, total) VALUES (?, ?, ?, ?, ?, ?)').run(
+    booking1,
+    guest1,
+    room1,
+    '2026-10-24',
+    '2026-10-28',
+    880
+  );
+  db.prepare('INSERT INTO bookings (id, guest_id, room_id, check_in, check_out, total) VALUES (?, ?, ?, ?, ?, ?)').run(
+    booking2,
+    guest2,
+    room3,
+    '2026-10-25',
+    '2026-10-30',
+    1700
+  );
+
+  db.prepare('INSERT INTO invoices (id, booking_id, guest_name, amount, status) VALUES (?, ?, ?, ?, ?)').run(
+    invoice1,
+    booking1,
+    'Ava Thompson',
+    880,
+    'Paid'
+  );
+  db.prepare('INSERT INTO invoices (id, booking_id, guest_name, amount, status) VALUES (?, ?, ?, ?, ?)').run(
+    invoice2,
+    booking2,
+    'Liam Carter',
+    1700,
+    'Unpaid'
+  );
+}
+
 function generateId(prefix = 'id') {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -160,6 +237,12 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
 
   const roomStatus = db.prepare('SELECT * FROM rooms ORDER BY number ASC').all();
 
+  const roomBreakdown = {
+    occupied: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Occupied').count,
+    available: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Available').count,
+    maintenance: db.prepare('SELECT COUNT(*) AS count FROM rooms WHERE status = ?').get('Maintenance').count
+  };
+
   res.json({
     totals: {
       guests: totalGuests,
@@ -168,6 +251,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       occupancy: totalRooms ? Math.round((occupiedRooms / totalRooms) * 100) : 0,
       revenue
     },
+    roomBreakdown,
     recentBookings,
     roomStatus
   });
