@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hotel CRM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">H</div>
+          <div>
+            <h2>Hotel CRM</h2>
+            <span>Operations</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="nav-btn active" data-panel="dashboard">Dashboard</button>
+          <button class="nav-btn" data-panel="guests">Guests</button>
+          <button class="nav-btn" data-panel="rooms">Rooms</button>
+          <button class="nav-btn" data-panel="bookings">Bookings</button>
+          <button class="nav-btn" data-panel="invoices">Invoices</button>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <section id="dashboard" class="panel active">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h1>Hotel Performance</h1>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card accent">
+              <span>Occupancy</span>
+              <strong id="occupancyStat">0%</strong>
+            </div>
+            <div class="stat-card">
+              <span>Revenue</span>
+              <strong id="revenueStat">$0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Bookings</span>
+              <strong id="bookingsStat">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Guests</span>
+              <strong id="guestsStat">0</strong>
+            </div>
+          </div>
+
+          <div class="two-column">
+            <div class="card">
+              <h3>Room Status</h3>
+              <div id="roomStatusList" class="stack-list"></div>
+            </div>
+            <div class="card">
+              <h3>Recent Bookings</h3>
+              <div id="recentBookings" class="stack-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="guests" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">CRM</p>
+              <h1>Guests</h1>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <form id="guestForm" class="card form-card">
+              <h3>Add Guest</h3>
+              <input id="guestName" type="text" placeholder="Guest name" required />
+              <input id="guestEmail" type="email" placeholder="Email" required />
+              <input id="guestPhone" type="tel" placeholder="Phone" required />
+              <select id="guestType">
+                <option value="VIP">VIP</option>
+                <option value="Corporate">Corporate</option>
+                <option value="Travel">Travel</option>
+                <option value="Regular">Regular</option>
+              </select>
+              <button type="submit">Add Guest</button>
+            </form>
+
+            <div class="card list-card">
+              <h3>Guest Directory</h3>
+              <div id="guestList" class="items-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="rooms" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h1>Rooms</h1>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <form id="roomForm" class="card form-card">
+              <h3>Add Room</h3>
+              <input id="roomNumber" type="text" placeholder="Room number" required />
+              <select id="roomType">
+                <option value="Standard">Standard</option>
+                <option value="Deluxe">Deluxe</option>
+                <option value="Suite">Suite</option>
+                <option value="Family">Family</option>
+              </select>
+              <input id="roomPrice" type="number" min="50" step="10" placeholder="Nightly rate" required />
+              <select id="roomStatus">
+                <option value="Available">Available</option>
+                <option value="Occupied">Occupied</option>
+                <option value="Maintenance">Maintenance</option>
+              </select>
+              <button type="submit">Add Room</button>
+            </form>
+
+            <div class="card list-card">
+              <h3>Room Inventory</h3>
+              <div id="roomList" class="items-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bookings" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Reservations</p>
+              <h1>Bookings</h1>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <form id="bookingForm" class="card form-card">
+              <h3>New Booking</h3>
+              <select id="bookingGuest"></select>
+              <select id="bookingRoom"></select>
+              <input id="checkIn" type="date" required />
+              <input id="checkOut" type="date" required />
+              <button type="submit">Create Booking</button>
+            </form>
+
+            <div class="card list-card">
+              <h3>Booking Schedule</h3>
+              <div id="bookingList" class="items-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="invoices" class="panel">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Finance</p>
+              <h1>Invoices</h1>
+            </div>
+          </div>
+
+          <div class="card wide-card">
+            <div id="invoiceList" class="items-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
